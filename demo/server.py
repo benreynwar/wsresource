@@ -8,18 +8,24 @@ except ImportError:
     sys.path.append("..")
     from wsresource import protocol
 
-class Fish(object):
+class Circle(object):
 
     def __init__(self, data):
+        print("**************** making a circle")
         self.id = data.get('id', None)
         self.resource = data.get('resource', None)
         self.color = data.get('color', None)
+        self.position = data.get('position', None)
+        self.radius = data.get('radius', None)
 
     def to_json(self):
         data = {'id': self.id,
                 'color': self.color,
-                'resource': self.resource
+                'resource': self.resource,
+                'position': self.position,
+                'radius': self.radius
         }
+        print('circle data in json will be {0} &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&'.format(data))
         return data
 
 repositories = {}
@@ -35,8 +41,8 @@ if __name__ == '__main__':
     factory.protocol = protocol.WSResourceV1Protocol
     factory.setProtocolOptions(allowHixie76 = True)
 
-    fish_repository = protocol.Repository('fish', Fish, factory)
-    register_repository(fish_repository)
+    circle_repository = protocol.Repository('circle', Circle, factory)
+    register_repository(circle_repository)
 
     listenWS(factory)
     reactor.run()
