@@ -1,7 +1,12 @@
 from twisted.internet import reactor
 from autobahn.twisted.websocket import listenWS
 
-from wsresource import protocol
+try:
+    from wsresource import protocol
+except ImportError:
+    import sys
+    sys.path.append("..")
+    from wsresource import protocol
 
 class Fish(object):
 

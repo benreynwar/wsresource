@@ -3,9 +3,9 @@ wsresource
 
 RESTish + subscribe interface to server-side data repositories
 
-Server side is implemented in python using twisted/autobahn.  server.py will run a demo server.
+Server side is implemented in python using twisted/autobahn.  demo/server.py will run a demo server.
 
-client/index.html will run the demo client.
+demo/demo.html will run the demo client.
 
 I'm trying to replicate the functionality of a RESTful api, but adding on the option of subscribing to resources.
 
