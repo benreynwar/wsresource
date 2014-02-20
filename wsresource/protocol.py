@@ -30,7 +30,6 @@ class Repository(object):
         specific_listeners = self.listeners.get(ident, set([]))
         generic_listeners = self.listeners.get('all', set([]))
         listeners = specific_listeners | generic_listeners
-        print('specific listners {0} all listeners {1}'.format(specific_listeners, generic_listeners))
         return listeners
 
     def add(self, data):
@@ -46,9 +45,6 @@ class Repository(object):
             data=data,
             resource=data['resource'])
         listeners = self.get_listeners(data['id'])
-        print('added')
-        print('listeners for id={0} are'.format(data['id']))
-        print(listeners)
         self.factory.send_action_report(action_report, listeners)
 
     def read(self, ident):
@@ -64,11 +60,9 @@ class Repository(object):
         return items
 
     def subscribe(self, ident, subscriber_id):
-        print('subscribing to {0}'.format(ident))
         if (ident not in self.listeners):
             self.listeners[ident] = set([])
         self.listeners[ident].add(subscriber_id)
-        print(self.listeners)
     
     def update(self, ident, data):
         value = self.read(ident)
@@ -81,35 +75,32 @@ class Repository(object):
         action_report = ActionReport(
             action='update',
             data=data,
-            resource=data.resource)
+            resource=data['resource'])
         listeners = self.get_listeners(data['id'])
-        protocol.sendActionReport(action_report, listeners)        
+        self.factory.send_action_report(action_report, listeners)
 
     def delete(self, ident):
         deleted = False
-        value = self.read(ident)
-        if value is not None:
-            self.items.remove(ident)
-            self.report_delete(value)
+        item = self.read(ident)
+        if item is not None:
+            del self.items[ident]
+            self.report_delete(item)
             deleted = True
         return deleted
         
-    def report_delete(self, data):
+    def report_delete(self, item):
         action_report = ActionReport(
             action='delete',
-            data=data,
-            resource=data.resource)
-        listeners = self.get_listeners(data['id'])
-        protocol.sendActionReport(action_report, listeners)        
+            data=None,
+            resource=item.resource)
+        listeners = self.get_listeners(item.id)
+        self.factory.send_action_report(action_report, listeners)
 
 
 class Action(object):
 
     def __init__(self, message, repositories, client_id):
-        print('got message: ' + str(message))
         self.repositories = repositories
-        print('repositories are: ');
-        print(self.repositories)
         self.client_id = client_id
         self.action = message.get('action', None)
         self.resource = message.get('resource', None)
@@ -127,7 +118,17 @@ class Action(object):
         return data
 
     def process(self):
+        bits = self.resource.split('/')
+        repository_resource = bits[0]
+        if len(bits) > 1:
+            try:
+                ident = int(bits[1])
+            except ValueError:
+                ident = None
+        else:
+            ident = None
         repository_resource = self.resource.split('/')[0]
+
         if (repository_resource in self.repositories):
             repository = self.repositories[repository_resource]
             if (self.action == 'add'):
@@ -140,9 +141,27 @@ class Action(object):
                 repository.subscribe('all', self.client_id)
                 response = self.create_action_response(
                     status='ok', message='', data=jsonified)
+            elif (self.action == 'delete'):
+                success = repository.delete(ident)
+                if success:
+                    response = self.create_action_response(
+                        status='ok', message='', data=None)
+                else:
+                    response = self.create_action_response(
+                        status='error', message='failed to delete', data=None)
+            elif (self.action == 'update'):
+                item = repository.update(ident, self.data)
+                if item:
+                    response = self.create_action_response(
+                        status='ok', message='', data=item.to_json())
+                else:
+                    response = self.create_action_resopnse(
+                        status='error', message='Could not find item to update',
+                        data=None)
             else:
                 response = self.create_action_response(
-                    status='error', message='unknown action', data=None)
+                    status='error',
+                    message='unknown action: {0}'.format(self.action), data=None)
         else:
             response = self.create_action_response(
                 status='error', message='unknown resource', data=None)
@@ -182,7 +201,6 @@ class ActionResponse(object):
         self.data = data
 
     def to_json(self):
-        print('responding to is ' + str(self.responding_to))
         data = {
             'protocol': 'wsresource',
             'messageType': 'actionresponse',
@@ -195,7 +213,44 @@ class ActionResponse(object):
         return data
         
 
-class WSResourceV1Protocol(websocket.WebSocketServerProtocol):
+class WSResourceClientSideV1Protocol(websocket.WebSocketClientProtocol):
+    
+    def __init__(self):
+        self._request_id_counter = 0
+
+    def _on_json_message(msg):
+        pass
+
+    def _on_action_response(action_response):
+        pass
+        
+    def _on_action_report(action_report):
+        pass
+
+    def _get_request_id():
+        ident = self._request_id_counter
+        self._request_id_counter += 1
+        return ident
+
+    def _try_send_message(message):
+        pass
+
+    def _on_open_connection():
+        pass
+
+    def _on_close_connection():
+        pass
+
+    def _send_message():
+        pass
+
+    def send_action(action):
+        action.request_id = self._get_request_id()
+        jsonified = json.dumps(action.to_json())
+        this._try_send_message(jsonified)
+    
+
+class WSResourceRepoSideV1Protocol(websocket.WebSocketServerProtocol):
 
     def __init__(self, *args, **kwargs):
         self._id_counter = 0
@@ -227,17 +282,20 @@ class WSResourceV1Protocol(websocket.WebSocketServerProtocol):
         message = json.loads(msg)
         protocol = message.get('protocol', '')
         if protocol == 'wsresource':
-            message_type = message.get('messageType', '')
-            if message_type == 'action':
-                action = Action(message, self.repositories, self.id)
-                response = action.process()
-                jsonified = json.dumps(response.to_json())
-                print('sending a message: ' + jsonified)
-                self.sendMessage(jsonified)
-            else:
-                print('Unknown message type: ' + message_type)
+            self.onWSResourceMessage(message)
         else:
             print('Unknown protocol: ' + protocol)
+
+    def onWSResourceMessage(self, message):
+        message_type = message.get('messageType', '')
+        if message_type == 'action':
+            action = Action(message, self.repositories, self.id)
+            response = action.process()
+            jsonified = json.dumps(response.to_json())
+            print('sending a message: ' + jsonified)
+            self.sendMessage(jsonified)
+        else:
+            print('Unknown message type: ' + message_type)        
 
     def onClose(self, wasClean, code, reason):
         print("WebSocket connection closed: {}".format(reason))
@@ -247,7 +305,7 @@ class WSResourceV1Protocol(websocket.WebSocketServerProtocol):
         self.factory.unregister(self)
 
 
-class WSResourceV1Factory(websocket.WebSocketServerFactory):
+class WSResourceRepoSideV1Factory(websocket.WebSocketServerFactory):
 
     def __init__(self, repositories, url, debug = False, debugCodePaths = False):
         websocket.WebSocketServerFactory.__init__(
@@ -270,22 +328,16 @@ class WSResourceV1Factory(websocket.WebSocketServerFactory):
 
     def unregister(self, client):
         if client in self.clients:
-            self.clients.remove(client.id)
+            del self.clients[client.id]
 
     def broadcast(self, msg):
         for c in self.clients:
             c.sendMessage(msg)
 
     def send_action_report(self, action_report, listeners):
-        print('listeners is')
-        print(listeners)
-        print('clients is')
-        print(self.clients)
         for listener_id in listeners:
             client = self.clients.get(listener_id, None)
-            print('id is {0} client is {1}'.format(client, listener_id))
             if client is not None:
                 jsonified = json.dumps(action_report.to_json())
-                print('sending {0}'.format(jsonified))
                 client.sendMessage(jsonified)
 

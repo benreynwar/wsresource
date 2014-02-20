@@ -21,7 +21,10 @@ define(
       var arr =[];
       for (var i in this.items) {
         if (this.items.hasOwnProperty(i)){
-          arr.push(this.items[i]);
+          var item = this.items[i];
+          if (item) {
+            arr.push(this.items[i]);
+          }
         }
       }
       return arr;
@@ -36,7 +39,6 @@ define(
     };
 
     ItemRepository.prototype.processActionReport = function(actionReport) {
-      console.log('processing an action report');
       if (actionReport.action == 'add') {
         var item = new this.ItemClass(actionReport.data);
         this.items[item.id] = item;
@@ -53,7 +55,7 @@ define(
           var item = this.items[ident];
           if (item) {
             this.items[ident] = null;
-            item.destory();
+            item.destroy();
           }
         }
       }
@@ -75,13 +77,13 @@ define(
       return deferred.promise;
     };
 
-    ItemRepository.prototype.update = function(item) {
-      var action = new Protocol.Action(item.resource, 'update', item.toJson());
+    ItemRepository.prototype.update = function(item, newData) {
+      var action = new Protocol.Action(item.resource, 'update', newData);
       var actionPromise = this.protocol.sendAction(action);
       var deferred = Q.defer();
       actionPromise.then(function(actionResponse) {
         if (actionResponse.status === 'ok') {
-          item.update(response.data);
+          item.update(actionResponse.data);
           deferred.resolve(item);
         } else {
           deferred.reject(actionResponse);

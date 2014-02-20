@@ -8,10 +8,10 @@ except ImportError:
     sys.path.append("..")
     from wsresource import protocol
 
+
 class Circle(object):
 
     def __init__(self, data):
-        print("**************** making a circle")
         self.id = data.get('id', None)
         self.resource = data.get('resource', None)
         self.color = data.get('color', None)
@@ -25,24 +25,31 @@ class Circle(object):
                 'position': self.position,
                 'radius': self.radius
         }
-        print('circle data in json will be {0} &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&'.format(data))
         return data
 
-repositories = {}
-def register_repository(repository):
-    repositories[repository.resource] = repository
+    def update(self, data):
+        if 'color' in data:
+            self.color = data['color']
+        if 'position' in data:
+            self.position = data['position']
+        if 'radius' in data:
+            self.radius = data['radius']
 
 if __name__ == '__main__':
     ws_address = 'ws://localhost:9407'
-    factory = protocol.WSResourceV1Factory(
+    repositories = {}
+    def register_repository(repository):
+        repositories[repository.resource] = repository
+    factory = protocol.WSResourceRepoSideV1Factory(
         repositories,
         ws_address, debug = False,
         debugCodePaths = False)
-    factory.protocol = protocol.WSResourceV1Protocol
+    factory.protocol = protocol.WSResourceRepoSideV1Protocol
     factory.setProtocolOptions(allowHixie76 = True)
 
-    circle_repository = protocol.Repository('circle', Circle, factory)
-    register_repository(circle_repository)
+    circle_resource = 'circle'
+    circle_repository = protocol.Repository(circle_resource, Circle, factory)
+    repositories[circle_resource] = circle_repository
 
     listenWS(factory)
     reactor.run()

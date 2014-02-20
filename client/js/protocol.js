@@ -2,7 +2,7 @@ define(
   ['console', 'q'],
   function(console, Q) {
 
-    var Protocol = function(ws_address, repositories) {
+    var Protocol = function(ws_address, repositories, binaryMessageHandler) {
       var _this = this;
       this._ws_address = ws_address;
       this._connection = new WebSocket(ws_address);
@@ -14,6 +14,7 @@ define(
           _this._onJsonMessage(e.data);
         }
       };
+      this._binaryMessageHandler = binaryMessageHandler;
       this._connection.onopen = this._onOpenConnection.bind(this);
       this._connection.onclose = this._onCloseConnection.bind(this);
       this._requestIdCounter = 0;
@@ -86,7 +87,11 @@ define(
     };
 
     Protocol.prototype._onBinaryMessage = function(msg) {
-      console.log('This server does not support binary messages');
+      if (!this.binaryMessageHandler) {
+        console.log('This server does not support binary messages');
+      } else {
+        this.binaryMessageHandler(msg);
+      }
     };
 
     Protocol.prototype._getRequestId = function() {
